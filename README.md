@@ -1,115 +1,70 @@
 # ternary-crossfader
 
-**Smooth blending between ternary channels.** DJ crossfader dynamics for agent populations — two signals enter, one blended signal leaves.
+**The art of the blend. Linear, equal-power, S-curve — how two signals become one.**
 
-## Why This Exists
+A crossfader is the simplest and most important mixing tool: one knob that fades between two sources. At position 0, you hear only A. At position 1, only B. In between, a blend. But *how* they blend matters enormously. A linear crossfade (straight line) causes a volume dip in the middle. An equal-power crossfade compensates — the total energy stays constant. An S-curve stays near the edges longer and transitions faster through the center, giving you more time in "pure A" and "pure B" territory.
 
-In a multi-agent ternary system, you don't always want hard handoffs. When one agent fades out and another takes over, the transition matters. A sudden switch from a contrarian (-1) to an agreeable (+1) agent creates discontinuities that cascade through the population.
+This crate implements four crossfade curves for ternary signals and provides tools for analyzing what each curve does to the signal's energy, phase, and character.
 
-Real DJs solved this decades ago: crossfaders. The question is how you blend two ternary streams when the values are {-1, 0, +1} — you can't just average them naively without understanding the energy characteristics of each curve.
+## What's Inside
 
-This crate implements four crossfader curves, each with different energy properties, plus utilities for finding equilibrium points in blended signals and preventing clipping in the output.
+- **`FaderCurve`** — enum of curve types: `Linear`, `EqualPower`, `SCurve`, `ConstantPower`
+- **`apply(position)`** — compute (left_gain, right_gain) for a position in [0, 1]
+- **`crossfade(signal_a, signal_b, position, curve)`** — blend two ternary signals at a given position
+- **`auto_crossfade(a, b, curve, steps)`** — sweep from A to B over N steps
+- **`spindle_point(curve)`** — the position where left_gain = right_gain (the exact center)
 
-## The Physics Behind It
-
-### Why Four Curves?
-
-Not all crossfaders are created equal. In audio engineering, the choice of curve determines what happens at the center position:
-
-- **Linear** — the obvious choice: left_gain = 1-p, right_gain = p. Problem: at center, both channels are at 50%, so the total energy drops. Two +1 signals blending at 50% each give 1.0, but a +1 and a -1 cancel to 0. This creates a "dip" in the middle.
-
-- **Equal Power** — uses cosine curves so that the sum of squares remains constant. This prevents the center dip. Mathematically: `left = cos(π/2 · (1-p))`, `right = cos(π/2 · p)`. The squared magnitudes always sum to 1.0.
-
-- **S-Curve** — steep transition at center, gentle at extremes. Uses a sigmoid: `1 / (1 + e^(-6(p - 0.5)))`. Most of the transition happens in a narrow band around 0.5. Good for situations where you want to keep both agents distinct until the last moment.
-
-- **Constant Power** — logarithmic curve that preserves perceived loudness. Uses `exp(0.5 · ln(p))` which gives a different power profile than equal-power.
-
-### The Spindle
-
-The `find_spindle` function locates the equilibrium point in a ternary stream — the position where local energy is minimized. This is the 8-ball spot: where the system wants to rest. In practice, this is where a blended signal settles when two agents with opposing stances find their compromise position.
-
-### Connection to RPS Dynamics
-
-When two agents interact through Rock-Paper-Scissors dominance (-1 beats +1, +1 beats 0, 0 beats -1), the crossfader determines how quickly one agent's influence supplants the other's. A linear crossfade means the transition is gradual and predictable. An S-curve means both agents hold their ground until a sudden flip — matching the sudden dominance reversals seen in the RPS experiments with period ~50.
-
-## Key Types and Functions
+## Quick Example
 
 ```rust
-/// Crossfader curve type.
-pub enum FaderCurve { Linear, EqualPower, SCurve, ConstantPower }
+use ternary_crossfader::*;
 
-impl FaderCurve {
-    /// Apply crossfader curve. position in [0,1], returns (left_gain, right_gain).
-    pub fn apply(&self, position: f64) -> (f64, f64)
-}
+let a = vec![1, 1, 1, 1];
+let b = vec![-1, -1, -1, -1];
 
-/// Blend two ternary streams via crossfader.
-pub fn crossfade(left: &[i8], right: &[i8], position: f64, curve: FaderCurve) -> Vec<f64>
+// Linear crossfade at 50%
+let mixed = crossfade(&a, &b, 0.5, FaderCurve::Linear);
+// Both at 50% — volume dip in the middle
 
-/// Hard cut — instant switch at a threshold position.
-pub fn hard_cut(left: &[i8], right: &[i8], position: f64, threshold: f64) -> Vec<i8>
+// Equal-power: constant total energy
+let ep = crossfade(&a, &b, 0.5, FaderCurve::EqualPower);
+// Cosine-based — no volume dip
 
-/// Transform mixing — scratch-style back-and-forth at given rate.
-pub fn transform_mix(left: &[i8], right: &[i8], rate: f64, ticks: usize) -> Vec<Vec<i8>>
+// S-curve: stays near the edges longer
+let sc = crossfade(&a, &b, 0.5, FaderCurve::SCurve);
+// Sigmoid-based — more time in pure A/B territory
 
-/// Find the equilibrium point (spindle) in a ternary stream.
-pub fn find_spindle(stream: &[i8]) -> (usize, f64)
-
-/// Balance point — center of mass of ternary distribution.
-pub fn balance_point(values: &[i8]) -> f64
-
-/// Channel gain staging — prevent clipping while preserving dynamics.
-pub fn gain_stage(channel: &mut [f64], target_peak: f64) -> f64
+// Auto sweep: gradual transition
+let sweep = auto_crossfade(&a, &b, FaderCurve::EqualPower, 8);
+// 8 steps from pure A to pure B
 ```
 
-## Usage
+## The Deeper Truth
 
-```rust
-use ternary_crossfader::{crossfade, hard_cut, FaderCurve, find_spindle, gain_stage};
+**The crossfade curve determines the *emotional arc* of the transition.** A linear fade is mechanical — the energy drops in the middle and both signals feel equally weak. An equal-power fade is smooth — the energy stays constant, but both signals lose their identity in the middle. An S-curve is dramatic — it holds onto each signal as long as possible, then switches fast. The choice of curve isn't technical; it's artistic.
 
-let agent_a = vec![1, 1, 0, -1, -1];  // agreeing → reflecting → contrarian
-let agent_b = vec![-1, 0, 1, 1, 1];   // contrarian → reflecting → agreeing
+In ternary, crossfading has a quantized quality: because the source signals only have three values, the intermediate blends are more like a smooth interpolation between discrete states than a continuous mix. The "in-between" positions create values that aren't strictly ternary — they're *weighted averages* of ternary values. The output must be snapped back to {-1, 0, +1} at each step, which creates an interesting staircase effect as the blend progresses.
 
-// Smooth blend at center position
-let blended = crossfade(&agent_a, &agent_b, 0.5, FaderCurve::EqualPower);
-// Energy preserved — no center dip
+**Use cases:**
+- **DJ mixing** — crossfade between tracks with different curve feels
+- **Film/game audio** — transition between ambient soundscapes
+- **Live performance** — blend between patches in real-time
+- **Generative music** — algorithmic transitions between sections
+- **Education** — the simplest signal blending operation
 
-// Hard cut: switch at 70% through
-let cut = hard_cut(&agent_a, &agent_b, 0.7, 0.7);
+## See Also
 
-// Find where the signal is calmest
-let (spindle_pos, spindle_energy) = find_spindle(&blended_as_i8);
+- **ternary-mixer** — mixing multiple sources (crossfading is 2-channel mixing)
+- **ternary-pan** — panning is a spatial crossfade (left ↔ right)
+- **ternary-wave** — generate the signals you're crossfading
+- **ternary-envelope** — envelopes shape the crossfade over time
+- **ternary-rack** — wire crossfaders into a modular signal chain
 
-// Prevent clipping after mixing
-let mut mixed = vec![1.5, -0.8, 2.1];
-let applied_gain = gain_stage(&mut mixed, 1.0);
+## Install
+
+```bash
+cargo add ternary-crossfader
 ```
-
-### Transform Mixing (Scratch)
-
-```rust
-use ternary_crossfader::transform_mix;
-
-// Scratch between two agents — they alternate based on a sine rate
-let results = transform_mix(&agent_a, &agent_b, 1.0, 20);
-// Returns 20 vectors, each a snapshot of which agent is "on"
-```
-
-## In the Ternary Fleet
-
-This is the **transition layer** in the DJ metaphor product stack:
-
-- `ternary-tenforward` — conversation engine producing the agent streams
-- `ternary-tempo` — BPM estimation determines *when* to crossfade
-- **ternary-crossfader** — *how* to blend during transitions
-- `ternary-mixer` — multi-channel mixing when you have more than two agents
-- `ternary-envelope` — ADSR shaping of individual agent contributions
-
-## References
-
-- Equal-power crossfade theory: the cosine curve ensures `left² + right² = 1` at all positions
-- RPS wave experiments: crossfade rate maps to dominance transition speed in population dynamics
-- Fibonacci period 8: the spindle tends to appear at positions aligned with the natural rhythm
 
 ## License
 
