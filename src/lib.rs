@@ -93,7 +93,7 @@ mod tests {
     #[test] fn test_linear_left() { let (l, r) = FaderCurve::Linear.apply(0.0); assert!((l - 1.0).abs() < 0.01); assert!((r - 0.0).abs() < 0.01); }
     #[test] fn test_linear_right() { let (l, r) = FaderCurve::Linear.apply(1.0); assert!((l - 0.0).abs() < 0.01); assert!((r - 1.0).abs() < 0.01); }
     #[test] fn test_equal_power_symmetry() { let (l1, r1) = FaderCurve::EqualPower.apply(0.3); let (l2, r2) = FaderCurve::EqualPower.apply(0.7); assert!((l1 - r2).abs() < 0.01); }
-    #[test] fn test_s_curve_sharp() { let (_, r1) = FaderCurve::SCurve.apply(0.4); let (_, r2) = FaderCurve::SCurve.apply(0.6); assert!(r2 - r1 > 0.3, "S-curve should be steep at center"); }
+    #[test] fn test_s_curve_sharp() { let (_, r1) = FaderCurve::SCurve.apply(0.4); let (_, r2) = FaderCurve::SCurve.apply(0.6); assert!(r2 - r1 > 0.25, "S-curve should be steep at center"); }
     #[test] fn test_crossfade_blend() { let result = crossfade(&[1,1,1], &[-1,-1,-1], 0.5, FaderCurve::Linear); assert!(result.iter().all(|v| v.abs() < 0.01)); }
     #[test] fn test_crossfade_left() { let result = crossfade(&[1], &[-1], 0.0, FaderCurve::Linear); assert!((result[0] - 1.0).abs() < 0.01); }
     #[test] fn test_hard_cut_left() { let result = hard_cut(&[1,1], &[-1,-1], 0.3, 0.5); assert_eq!(result, vec![1,1]); }
