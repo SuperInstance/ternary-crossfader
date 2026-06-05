@@ -1,0 +1,6 @@
+[package]
+name = "ternary-crossfader"
+version = "0.1.0"
+edition = "2021"
+description = "Crossfader dynamics for ternary channels — smooth blending, cut mixing, transform weighting"
+license = "MIT"
